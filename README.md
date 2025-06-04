@@ -18,8 +18,8 @@
 <p>
 
 ## 🔥 Latest News!
-* May 27, 2025: 🎉 We have released the Phantom-Wan-14B model, a more powerful Subject-to-Video generation model.
-* Apr 23, 2025: 😊 Thanks to [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper/tree/dev) for adapting ComfyUI to Phantom-Wan-1.3B. Everyone is welcome to use it!
+* May 27, 2025: 🎉 We have released the Phantom-Wan-14B model, a more powerful Subject-to-Video generation model. 
+* Apr 23, 2025: 😊 Thanks to [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper/tree/dev) for adapting ComfyUI to Phantom-Wan-1.3B (May 27: the 14B model has also been adapted.). Everyone is welcome to use it!
 * Apr 21, 2025: 👋 Phantom-Wan is coming! We adapted the Phantom framework into the [Wan2.1](https://github.com/Wan-Video/Wan2.1) video generation model. The inference codes and checkpoint have been released.
 * Apr 10, 2025: We have updated the [full version](https://arxiv.org/pdf/2502.11079v2) of the Phantom paper, which now includes more detailed descriptions of the model architecture and dataset pipeline.
 * Feb 16, 2025: We proposed a novel subject-consistent video generation model, **Phantom**, and have released the [report](https://arxiv.org/pdf/2502.11079v1) publicly. For more video demos, please visit the [project page](https://phantom-video.github.io/Phantom/).
