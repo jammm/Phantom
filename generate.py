@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Monkey-patch torch_cpp_ext to use ROCm architecture flags instead of CUDA
+import torch.utils.cpp_extension as torch_cpp_ext
+
+# Store the original function
+_original_get_cuda_arch_flags = torch_cpp_ext._get_cuda_arch_flags
+
+# Replace with ROCm arch flags function
+torch_cpp_ext._get_cuda_arch_flags = torch_cpp_ext._get_rocm_arch_flags
+
 import argparse
 from datetime import datetime
 import logging
