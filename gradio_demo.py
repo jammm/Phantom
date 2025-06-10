@@ -2,9 +2,12 @@ import gradio as gr
 import subprocess
 import glob
 import os
+import threading
+import time
 from gradio_log import Log
 
 log_file = "generation_log.txt"
+rocm_smi_log = "rocm_smi.txt"
 
 def get_example_images():
     """Get all PNG files from the examples folder"""
@@ -13,6 +16,51 @@ def get_example_images():
         png_files = glob.glob(os.path.join(example_dir, "*.png"))
         return sorted(png_files)
     return []
+
+def start_rocm_smi_monitoring():
+    """Start rocm-smi monitoring in the background"""
+    def run_rocm_smi():
+        try:
+            # Create/truncate the rocm-smi log file
+            with open(rocm_smi_log, "w") as f:
+                pass
+            
+            # Continuously run rocm-smi with 1 second intervals
+            while True:
+                try:
+                    # Run rocm-smi command
+                    result = subprocess.run(
+                        ["rocm-smi"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    
+                    # Write output to file
+                    with open(rocm_smi_log, "w") as f:
+                        f.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+                        f.write(result.stdout)
+                        if result.stderr:
+                            f.write(f"STDERR: {result.stderr}")
+                        f.write("\n")
+                        f.flush()
+                    
+                    # Sleep for 1 second before next run
+                    time.sleep(1)
+                    
+                except subprocess.TimeoutExpired:
+                    with open(rocm_smi_log, "a") as f:
+                        f.write(f"rocm-smi command timed out at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.flush()
+                    time.sleep(1)
+                    
+        except Exception as e:
+            with open(rocm_smi_log, "a") as f:
+                f.write(f"Error running rocm-smi monitoring: {e}\n")
+    
+    # Start monitoring in a separate thread
+    monitor_thread = threading.Thread(target=run_rocm_smi, daemon=True)
+    monitor_thread.start()
 
 def generate_video(prompt, width, height, selected_examples, uploaded_images, frames, fps, ckpt_dir, phantom_ckpt, ulysses_size, ring_size, num_gpus):
     # Validate inputs
@@ -106,6 +154,9 @@ def generate_video(prompt, width, height, selected_examples, uploaded_images, fr
             f.write(f"Error running command: {e}\n")
         return f"❌ Error running command: {e}", None
 
+# Start ROCm-SMI monitoring
+start_rocm_smi_monitoring()
+
 with gr.Blocks() as demo:
     gr.Markdown("## 🎬 Phantom Video Generation")
 
@@ -122,11 +173,14 @@ with gr.Blocks() as demo:
     # Get example images
     example_images = get_example_images()
     
+    # Pre-selected images
+    preselected_images = ["examples/ref14.png", "examples/ref15.png", "examples/ref16.png"]
+    
     with gr.Row():
         with gr.Column():
             gr.Markdown("**Select Example Images (click to select/deselect):**")
             selected_examples = gr.Gallery(
-                value=[],
+                value=preselected_images,
                 label="Selected Example Images",
                 show_label=True,
                 elem_id="selected_gallery",
@@ -135,7 +189,7 @@ with gr.Blocks() as demo:
                 object_fit="contain",
                 height="auto",
                 selected_index=None,
-                allow_preview=True,
+                allow_preview=False,
                 interactive=True
             )
             
@@ -151,7 +205,7 @@ with gr.Blocks() as demo:
                     object_fit="contain",
                     height="auto",
                     selected_index=None,
-                    allow_preview=True,
+                    allow_preview=False,
                     interactive=True
                 )
         
@@ -165,7 +219,7 @@ with gr.Blocks() as demo:
             )
     
     # Hidden component to store selected example paths
-    selected_example_paths = gr.State(value=["examples/ref14.png", "examples/ref15.png", "examples/ref16.png"])
+    selected_example_paths = gr.State(value=preselected_images)
     
     def update_selection(evt: gr.SelectData, current_paths):
         """Handle clicking on example gallery to add/remove from selection"""
@@ -180,6 +234,24 @@ with gr.Blocks() as demo:
         
         return current_paths, current_paths
     
+    def remove_from_selection(evt: gr.SelectData, current_paths):
+        """Handle clicking on selected gallery to remove from selection"""
+        if evt.index < len(current_paths):
+            # Remove the clicked image from selection
+            current_paths.pop(evt.index)
+        
+        return current_paths, current_paths
+    
+    def handle_uploaded_images(uploaded_files, current_paths):
+        """Handle uploaded images by adding them to the selection"""
+        if uploaded_files:
+            # Add uploaded file paths to current selection
+            for file in uploaded_files:
+                if file.name not in current_paths:
+                    current_paths.append(file.name)
+        
+        return current_paths, current_paths
+    
     # Connect gallery click to selection update
     if example_images:
         example_gallery.select(
@@ -187,6 +259,20 @@ with gr.Blocks() as demo:
             inputs=[selected_example_paths],
             outputs=[selected_example_paths, selected_examples]
         )
+    
+    # Connect selected gallery click to removal
+    selected_examples.select(
+        fn=remove_from_selection,
+        inputs=[selected_example_paths],
+        outputs=[selected_example_paths, selected_examples]
+    )
+    
+    # Connect uploaded images to selection
+    uploaded_images.change(
+        fn=handle_uploaded_images,
+        inputs=[uploaded_images, selected_example_paths],
+        outputs=[selected_example_paths, selected_examples]
+    )
     
     with gr.Row():
         frames = gr.Number(label="Frames", value=121)
@@ -205,12 +291,16 @@ with gr.Blocks() as demo:
     generate_button = gr.Button("🎬 Generate Video", variant="primary")
     output_log = gr.Textbox(label="Output Log", interactive=False)
     
-    # Create and truncate log file
+    # Create and truncate log files
     with open(log_file, "w") as f:
         pass
     
     # Add gradio-log component for real-time logging
-    log_component = Log(log_file, dark=True, xterm_font_size=12)
+    log_component = Log(log_file, dark=True, xterm_font_size=10, show_label=False,height=300)
+    
+    # Add gradio-log component for ROCm-SMI monitoring
+    gr.Markdown("### GPU Monitoring (ROCm-SMI)")
+    rocm_smi_component = Log(rocm_smi_log, dark=True, xterm_font_size=10, show_label=False, height=260, reload_every_time=True)
     
     video_display = gr.Video(label="Generated Video", format="mp4")
     
